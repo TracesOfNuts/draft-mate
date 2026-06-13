@@ -46,6 +46,33 @@ export async function isAvailable(cfg: Config): Promise<boolean> {
   }
 }
 
+/**
+ * Force the model to load into memory before the batch, so concurrent first
+ * requests don't race the (slow) cold-start load and trip their timeouts.
+ * Best-effort: never throws.
+ */
+export async function warmup(cfg: Config): Promise<void> {
+  try {
+    assertLocalOllama(cfg.ollama.baseUrl);
+    await fetchWithTimeout(
+      `${cfg.ollama.baseUrl}/api/generate`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: cfg.ollama.model,
+          prompt: "ok",
+          stream: false,
+          options: { num_predict: 1 },
+        }),
+      },
+      Math.max(cfg.ollama.timeoutMs, 120_000),
+    );
+  } catch {
+    /* ignore — analysis will fall back to heuristics if the model is truly absent */
+  }
+}
+
 /** List installed model tags. Returns [] if the server is unreachable. */
 export async function listModels(cfg: Config): Promise<string[]> {
   try {
@@ -92,9 +119,27 @@ async function chatJson<T>(
     throw new Error(`Ollama responded ${res.status}: ${await res.text().catch(() => "")}`);
   }
   const data = (await res.json()) as ChatResult;
-  const content = data.message?.content?.trim();
+  let content = data.message?.content?.trim();
   if (!content) throw new Error("Ollama returned an empty response");
+  // Defensive: strip ```json fences some models add despite format constraints.
+  const fence = content.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+  if (fence?.[1]) content = fence[1].trim();
   return JSON.parse(content) as T;
+}
+
+/** True if a string is actually a JSON object/array rather than prose. */
+function looksLikeJson(s: string): boolean {
+  const t = s.trim();
+  return t.startsWith("{") || t.startsWith("[");
+}
+
+/** Fall back to a snippet-derived summary when the model misuses the field. */
+function safeSummary(raw: string | undefined, email: Email): string {
+  if (raw && raw.trim() && !looksLikeJson(raw)) return raw.trim();
+  const src = (email.snippet || email.bodyText || "").replace(/\s+/g, " ").trim();
+  if (!src) return "(no preview available)";
+  const twoSentences = src.split(/(?<=[.!?])\s+/).slice(0, 2).join(" ");
+  return twoSentences.length > 200 ? twoSentences.slice(0, 197) + "…" : twoSentences;
 }
 
 /**
@@ -138,7 +183,7 @@ export async function analyzeWithLlm(email: Email, cfg: Config): Promise<Analysi
     from: email.from,
     subject: email.subject,
     receivedAt: email.receivedAt,
-    summary: out.summary,
+    summary: safeSummary(out.summary, email),
     scores,
     scoreTotal: total,
     priority,

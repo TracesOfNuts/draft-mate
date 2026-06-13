@@ -10,7 +10,7 @@ import type { AccountConfig, Config } from "./config.js";
 import type { Analysis, AnalysisSource, FetchFilter, RunLog } from "./types.js";
 import { getProvider } from "./providers/provider.js";
 import { analyzeHeuristically } from "./heuristics.js";
-import { analyzeWithLlm, isAvailable } from "./llm/ollama.js";
+import { analyzeWithLlm, isAvailable, warmup } from "./llm/ollama.js";
 import { priorityCounts, compareAnalyses } from "./scoring.js";
 import type { Store } from "./store/store.js";
 
@@ -66,6 +66,9 @@ export async function runTriage(
   const ids = await provider.listMessages(opts.filter);
 
   const llmAvailable = !opts.forceHeuristics && (await isAvailable(cfg));
+  // Pay the model cold-start once, up front, so concurrent first requests
+  // don't each race the load and trip their timeouts.
+  if (llmAvailable) await warmup(cfg);
   let usedLlm = false;
   let done = 0;
 

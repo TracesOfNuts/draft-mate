@@ -78,6 +78,9 @@ test("re-running uses the cache (idempotent) unless refresh", async () => {
 
 test("makeDraft produces a safe template draft offline (no LLM)", async () => {
   const cfg = loadConfig();
+  // Force the offline path deterministically (dead loopback port), regardless
+  // of whether a real Ollama server happens to be running on this machine.
+  cfg.ollama = { ...cfg.ollama, baseUrl: "http://127.0.0.1:1" };
   const provider = MockProvider.fromFixtures("demo");
   const email = await provider.getMessage("m-001");
   const draft = await makeDraft(email, undefined, cfg);
