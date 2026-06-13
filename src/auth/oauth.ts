@@ -95,49 +95,49 @@ export async function authorize(acct: AccountConfig, cfg: Config): Promise<void>
   const { verifier, challenge } = pkce();
   const state = randomBytes(16).toString("hex");
 
-  const { code, redirectUri } = await new Promise<{ code: string; redirectUri: string }>(
-    (resolve, reject) => {
-      const server = createServer((req, res) => {
-        const url = new URL(req.url ?? "/", "http://127.0.0.1");
-        if (url.pathname !== "/callback") {
-          res.writeHead(404).end();
-          return;
-        }
-        const returnedState = url.searchParams.get("state");
-        const returnedCode = url.searchParams.get("code");
-        res.writeHead(200, { "content-type": "text/html" });
-        res.end("<html><body><h3>draft-mate: you can close this tab.</h3></body></html>");
-        server.close();
-        if (returnedState !== state || !returnedCode) {
-          reject(new Error("OAuth callback failed (state mismatch or no code)."));
-        } else {
-          const addr = server.address();
-          const port = typeof addr === "object" && addr ? addr.port : 0;
-          resolve({ code: returnedCode, redirectUri: `http://127.0.0.1:${port}/callback` });
-        }
+  // Computed once, when the loopback server starts listening, and reused for
+  // BOTH the auth request and the token exchange so they match exactly. (Do not
+  // re-derive from server.address() after close() — it returns null → port 0.)
+  let redirectUri = "";
+  const code = await new Promise<string>((resolve, reject) => {
+    const server = createServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      if (url.pathname !== "/callback") {
+        res.writeHead(404).end();
+        return;
+      }
+      const returnedState = url.searchParams.get("state");
+      const returnedCode = url.searchParams.get("code");
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end("<html><body><h3>draft-mate: you can close this tab.</h3></body></html>");
+      server.close();
+      if (returnedState !== state || !returnedCode) {
+        reject(new Error("OAuth callback failed (state mismatch or no code)."));
+      } else {
+        resolve(returnedCode);
+      }
+    });
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      redirectUri = `http://127.0.0.1:${port}/callback`;
+      const params = new URLSearchParams({
+        client_id: ep.clientId(),
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: ep.defaultScopes,
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+        state,
+        access_type: "offline",
+        prompt: "consent",
       });
-      server.listen(0, "127.0.0.1", () => {
-        const addr = server.address();
-        const port = typeof addr === "object" && addr ? addr.port : 0;
-        const redirectUri = `http://127.0.0.1:${port}/callback`;
-        const params = new URLSearchParams({
-          client_id: ep.clientId(),
-          redirect_uri: redirectUri,
-          response_type: "code",
-          scope: ep.defaultScopes,
-          code_challenge: challenge,
-          code_challenge_method: "S256",
-          state,
-          access_type: "offline",
-          prompt: "consent",
-        });
-        const authUrl = `${ep.authorize}?${params}`;
-        console.log(`\nOpen this URL to authorize draft-mate:\n${authUrl}\n`);
-        openBrowser(authUrl);
-      });
-      server.on("error", reject);
-    },
-  );
+      const authUrl = `${ep.authorize}?${params}`;
+      console.log(`\nOpen this URL to authorize draft-mate:\n${authUrl}\n`);
+      openBrowser(authUrl);
+    });
+    server.on("error", reject);
+  });
 
   const body = new URLSearchParams({
     client_id: ep.clientId(),
