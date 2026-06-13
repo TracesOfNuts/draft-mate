@@ -24,6 +24,7 @@ import { renderInbox, renderDraft } from "./render.js";
 import { makeDraft } from "./drafting.js";
 import { isAvailable, listModels } from "./llm/ollama.js";
 import { getProvider } from "./providers/provider.js";
+import { spawn } from "node:child_process";
 
 // --- tiny arg parser ------------------------------------------------------
 
@@ -254,12 +255,42 @@ async function cmdDoctor(cfg: Config): Promise<void> {
   console.log(`accounts:     ${["demo", ...cfg.accounts.map((a) => a.key)].join(", ")}`);
 }
 
+function openBrowser(url: string): void {
+  const platform = process.platform;
+  const cmd = platform === "win32" ? "cmd" : platform === "darwin" ? "open" : "xdg-open";
+  const args = platform === "win32" ? ["/c", "start", "", url] : [url];
+  try {
+    spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
+  } catch {
+    /* user can open the URL manually */
+  }
+}
+
+async function cmdServe(args: Args, cfg: Config): Promise<void> {
+  const { startServer } = await import("./server/server.js");
+  const port = num(args.flags, "port", 4317);
+  const host = "127.0.0.1";
+  const url = await startServer({ port, host });
+  console.log(`\n  draft-mate dashboard running at ${url}`);
+  console.log(`  Local-first — analysis stays on this machine.\n`);
+  const llm = await isAvailable(cfg);
+  console.log(
+    llm
+      ? `  Local model: ${cfg.ollama.model} (ready)`
+      : `  Local model: not running — using heuristics. Run "draft-mate doctor".`,
+  );
+  console.log(`  Press Ctrl+C to stop.\n`);
+  if (!bool(args.flags, "no-open")) openBrowser(url);
+}
+
 function usage(): void {
   console.log(`draft-mate — local-first email triage
 
 Usage: draft-mate <command> [options]
 
 Commands:
+  serve      Launch the web dashboard (recommended)
+             --port <n>   port (default 4317)   --no-open   don't open a browser
   triage     Fetch + rank an inbox
              --account <key>     account key (default: demo sample inbox)
              --unread            only unread
@@ -282,6 +313,7 @@ Commands:
   help       Show this help
 
 Examples:
+  draft-mate serve
   draft-mate triage --account demo --unread --by-category
   draft-mate doctor
 `);
@@ -295,6 +327,7 @@ async function main(): Promise<void> {
   const cfg = loadConfig();
 
   switch (command) {
+    case "serve": return cmdServe(args, cfg);
     case "triage": return cmdTriage(args, cfg);
     case "draft": return cmdDraft(args, cfg);
     case "drafts": return cmdDrafts(args, cfg);

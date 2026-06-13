@@ -14,6 +14,9 @@
     "build": "tsc -p tsconfig.json",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "triage": "node dist/cli.js",
+    "serve": "node dist/cli.js serve",
+    "start": "node dist/cli.js serve",
+    "dev": "tsc -p tsconfig.json && node dist/cli.js serve",
     "demo": "node dist/cli.js triage --account demo --unread",
     "test": "node --test \"dist/**/*.test.js\""
   },

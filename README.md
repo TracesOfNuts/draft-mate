@@ -21,19 +21,40 @@ on-device heuristics. Nothing is sent to any cloud AI service.
 ```bash
 npm install
 npm run build
-npm run demo            # triage the bundled sample inbox
+npm run serve            # opens the dashboard at http://127.0.0.1:4317
 ```
 
-Or drive the CLI directly:
+That launches the **web dashboard** against a built-in sample inbox
+(`fixtures/sample-emails.json`), so you can see the whole product — ranked
+cards, priority/category filters, score breakdowns, email detail, and AI draft
+replies — without connecting any real account. Click **Triage inbox** to run the
+pipeline (a progress bar streams live as each email is analysed).
+
+Prefer the terminal? The same engine drives a CLI:
 
 ```bash
-node dist/cli.js triage --account demo --unread --by-category
+npm run demo                                              # ranked inbox in the terminal
+node dist/cli.js triage --account demo --by-category
 node dist/cli.js doctor
 ```
 
-`--account demo` uses a built-in sample inbox (`fixtures/sample-emails.json`),
-so you can see the full pipeline — fetch → analyse → rank → group → log —
-without connecting any real account.
+### The dashboard
+
+`draft-mate serve` (`--port <n>`, `--no-open`) is a local web app served from
+loopback only. It shows:
+
+- a **ranked inbox** of cards colour-coded by priority, each with a summary, the
+  reason for its rank, the recommended next action, deadlines, and a six-bar
+  score sparkline;
+- **sidebar filters** by priority band and by actionable category, with live
+  counts;
+- a **detail drawer** with the full message, score breakdown, and requested
+  actions;
+- **AI reply drafts** you can generate, edit, approve, and save to your
+  provider's Drafts folder — never sent.
+
+Nothing leaves your machine except the calls to your email provider and the
+loopback LLM.
 
 ## Requirements
 
@@ -57,6 +78,7 @@ node dist/cli.js doctor
 
 | Command | What it does |
 |---|---|
+| `serve` | Launch the web dashboard. Flags: `--port <n>` (default 4317), `--no-open`. |
 | `triage` | Fetch + rank an inbox. Flags: `--account`, `--unread`, `--since <date>`, `--limit <n>`, `--by-category`, `--heuristics`, `--refresh`, `--json`. |
 | `draft` | Generate a reply draft for a message: `--account <key> --message <id>`. Never sends. |
 | `drafts` | List locally-generated drafts. |
@@ -181,6 +203,8 @@ src/
   providers/          # interface + mock + gmail + graph adapters
   auth/               # OAuth (PKCE loopback) + encrypted secret vault
   store/              # JSON store (SQLite is the documented upgrade)
+  server/             # local web server: JSON + SSE API over the engine
+web/                  # dashboard SPA (index.html, styles.css, app.js)
 fixtures/             # sample inbox for the demo + tests
 ```
 
