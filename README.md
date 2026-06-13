@@ -94,7 +94,8 @@ draft-mate talks to the Gmail API and Microsoft Graph directly. You supply your
 own OAuth client (no third-party server is involved). Credentials are read from
 environment variables so nothing secret lives in the repo.
 
-**Gmail** — create an OAuth *Desktop app* client in Google Cloud Console:
+**Gmail** — create an OAuth *Desktop app* client in Google Cloud Console.
+Full click-by-click walkthrough: **[docs/google-setup.md](docs/google-setup.md)**.
 
 ```bash
 export GMAIL_CLIENT_ID="...apps.googleusercontent.com"
